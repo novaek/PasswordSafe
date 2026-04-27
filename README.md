@@ -64,6 +64,8 @@ Enjoy the software ;)
 
 
 # 2) File Format:
+
+```
 Plaintext block (encrypted as a whole):
    [4B] entry count N
    For each entry:
@@ -80,7 +82,8 @@ On-disk file:
    Magic   : "KRG1" (4 bytes)
    Salt    : 16 bytes
    IV+tag+ciphertext (rest of file)
+```
 
 # 3) Limit of a single file :
-  A. Limit of website : 65535 websites
-  B. limit of entries for a single website : 256 passwords and usernames
+Limit of website : 65535 websites\
+limit of entries for a single website : 256 passwords and usernames
