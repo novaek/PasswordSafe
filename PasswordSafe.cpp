@@ -33,10 +33,7 @@ namespace fs = std::filesystem;
 
 int index;
 
-struct comp_index{
-    std::vector<indexble> RL_INDEX;
-    uint16_t count;
-};
+
 
 struct entry{
     std::string username;
@@ -49,6 +46,11 @@ struct indexble {
     std::vector<entry> values;
 };
 
+struct comp_index{
+    std::vector<indexble> RL_INDEX;
+    uint16_t count;
+};
+
 struct GetSec {
     std::vector<BYTE> salt;
     std::vector<BYTE> IV;
@@ -56,8 +58,6 @@ struct GetSec {
     std::vector<BYTE> key;
 };
 
-
-std::vector<indexble> RL_INDEX;
 GetSec LSMP;
 comp_index LMPP;
 
@@ -76,7 +76,22 @@ static bool deriveKey(const std::string& password, const BYTE* salt, DWORD saltL
 // Encrypt plaintext with AES-256-GCM.
 // Output layout: [12-byte IV][16-byte tag][ciphertext]
 
+void print_lst(){
+    int ze=0;
+    std::cout << "_________________________________________________________________________________" << std::endl << "Saved Note Index :";
+    for (auto& e : LMPP.RL_INDEX){
+        std::string website = e.name;
+        int account_size = e.values.size();
+        std::cout << "[" << ze << "] "<<"website : " << website << ", user: " << account_size << std::endl;
+        ze++;
+    }
+    std::cout << "_________________________________________________________________________________" << std::endl;
+
+
+}
+
 bool LD_SEC(const std::string& archivePath) {
+
     std::string password;
     std::getline(std::cin, password);
 
@@ -222,12 +237,30 @@ static bool aesgcmDecrypt(const BYTE* key, const std::vector<BYTE>& blob, std::v
 }
 
 bool save_all(){
+    LMPP.count=LMPP.RL_INDEX.size();
+    std::string p1, p2;
+
+    std::cout << "Enter new password: ";
+    std::getline(std::cin, p1);
+
+    std::cout << "Confirm password: ";
+    std::getline(std::cin, p2);
+
+    if (p1 != p2) {
+        std::cerr << "Passwords do not match\n";
+        return false;
+    }
+    BCryptGenRandom(nullptr, LSMP.salt.data(), 16, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    if (!deriveKey(p2, LSMP.salt.data(), 16, LSMP.key.data(), 32)) {
+        std::cerr << "Key derivation failed\n";
+        return false;
+    }
     std::vector<BYTE> plain;
     plain.push_back(static_cast<BYTE>(LMPP.count & 0xFF));
     plain.push_back(static_cast<BYTE>((LMPP.count >> 8) &0xFF));
     plain.push_back(static_cast<BYTE>((LMPP.count >> 16) &0xFF));
     plain.push_back(static_cast<BYTE>((LMPP.count >> 24) &0xFF));
-    for (auto j: LMPP.RL_INDEX){
+    for (auto& j: LMPP.RL_INDEX){
         plain.push_back(static_cast<BYTE>((j.name.size()) &0xFF));
         plain.insert(plain.end(), j.name.begin(), j.name.end());
         plain.push_back(static_cast<BYTE>((j.size) &0xFF));
@@ -247,6 +280,8 @@ bool save_all(){
         file.insert(file.end(), enc.begin(), enc.end());
         std::ofstream outputFileStream(path, std::ios::out | std::ios::binary | std::ios::trunc);
         outputFileStream.write(reinterpret_cast<const char*>(file.data()), file.size());
+        SecureZeroMemory(p1.data(), p1.size());
+        SecureZeroMemory(p2.data(), p2.size());
         return true;
     }
     return false;
@@ -266,7 +301,7 @@ bool add_index(){
     entry timed;
     timed.password = password;
     timed.username = username;
-    for (auto e: LMPP.RL_INDEX){
+    for (auto& e: LMPP.RL_INDEX){
         if (e.name==new_named_entry){
             if (e.size>0xFF){
                 std::cout << "too much entries" << std::endl;
@@ -311,9 +346,17 @@ int use() {
     if (!in) { std::cerr << "Cannot open archive.\n"; return -76; }
     in.seekg(4 + 16); // skip magic + salt
     std::vector<BYTE> cipherBlob(std::istreambuf_iterator<char>(in), {});
-    if (cipherBlob.size()<3){
+    if ((cipherBlob.size()==28 )||(cipherBlob.size()== 0)){
         add_index();
+        save_all();
+        return 20;
     }
+    else if (cipherBlob.size()<28)
+    {
+        std::cerr << "Corrupted archive (too small)\n" << cipherBlob.size() << std::endl;
+        return -172;
+    }
+    
     in.close();
     std::vector<BYTE> plain;
     if (!aesgcmDecrypt(LSMP.key.data(), cipherBlob, plain)) {
@@ -327,33 +370,28 @@ int use() {
 
     if (p + 4 > end) { std::cerr << "Corrupt archive.\n"; return -2; }
     LMPP.count  = readU32(p); p += 4;
+    LMPP.RL_INDEX.clear();
+    LMPP.RL_INDEX.resize(LMPP.count);
     for (uint32_t i = 0; i < LMPP.count; i++) {
         if (p + 2 > end) { std::cerr << "Corrupt index.\n"; return -3; }
-        uint16_t total_size = readU16(p); p += 2;
-        LMPP.RL_INDEX[i].size=total_size;
-        int8_t namlen = p[0]; p++;
+        uint8_t namlen = p[0]; p++;
         if (p + namlen > end) { std::cerr << "Corrupt index.\n"; return -4; }
         LMPP.RL_INDEX[i].name = std::string((char*)p, namlen); p += namlen;
         LMPP.RL_INDEX[i].size = p[0]; p++;
         
         for (int az=0; az<LMPP.RL_INDEX[i].size; az++){
             int usrlen = p[0]; p++;
-            LMPP.RL_INDEX[i].values[az].username= std::string((char*)p, usrlen);
+            entry e;
+            e.username=std::string((char*)p, usrlen);
+            p+=usrlen;
+            
             int passlen = p[0]; p++;
-            LMPP.RL_INDEX[i].values[az].password= std::string((char*)p, passlen);
+            e.password= std::string((char*)p, passlen);p+=passlen;
+            LMPP.RL_INDEX[i].values.push_back(e);
         }
     }
-    int ze=0;
-    std::cout << "_________________________________________________________________________________" << std::endl << "Saved Note Index :";
-    for (auto e : LMPP.RL_INDEX){
-        std::string website = e.name;
-        int account_size = e.values.size();
-        std::cout << "[" << ze << "] "<<"website : " << website << ", user: " << account_size << std::endl;
-        ze++;
-    }
-    std::cout << "_________________________________________________________________________________" << std::endl;
-
     while (true) {
+        print_lst();
         std::cout << "\nEnter index to read/modify (or 'q' to quit, 'a' to delete, 'x' for a new one): ";
         std::string input;
         std::getline(std::cin, input);
@@ -364,12 +402,29 @@ int use() {
             
         }
         else if (input == "a" || input == "A"){
-            int Id = std::stoi(input);
-            LMPP.RL_INDEX.erase(RL_INDEX.begin()+Id-1);   
+            std::cout << "\nEnter index to delete (negative index for none): "<< std::endl;
+            std::string newinput;
+            std::getline(std::cin, newinput);
+            int Id2 = std::stoi(newinput);
+            if (Id2>=0){
+                LMPP.RL_INDEX.erase(LMPP.RL_INDEX.begin()+Id2-1);
+            }  
         }
         else {
             int Id = std::stoi(input);
-            std::cout << "website selected : " <<LMPP.RL_INDEX[Id].name << std::endl;
+            std::cout << "website selected" <<LMPP.RL_INDEX[Id].name << std::endl;
+            int hjt=0;
+            for (auto& slk: LMPP.RL_INDEX[Id].values){
+                std::cout << "["<< hjt << "] "<<slk.username << std::endl;
+                hjt++;
+            }
+            std::cout << "\nEnter index to get password (negative index for none): " << std::endl;
+            std::string newinput;
+            std::getline(std::cin, newinput);
+            int Id2 = std::stoi(newinput);
+            if (Id2>=0){
+                std::cout << "password for username " << LMPP.RL_INDEX[Id].values[Id2].username << " : " << LMPP.RL_INDEX[Id].values[Id2].password << std::endl;
+            }
         }
     }
     if (save_all()){
@@ -396,7 +451,8 @@ bool open(){
 
 
 int main(){
-        while (true){
+    
+    while (true){
         std::string ind;
         std::cout << " choose between openning a file or creating one :\n [0] open an existing file \n [1] creat a new file \n [2] Quit"<< std::endl;
         std::getline(std::cin, ind);
@@ -410,8 +466,7 @@ int main(){
         }
         else if (mls==2){
             break;
-        }
-        
+        }    
     }
     return 1;
 }
