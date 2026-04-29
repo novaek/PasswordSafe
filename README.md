@@ -93,3 +93,5 @@ limit of entries for a single website : 256 passwords and usernames
 I also have developped a GUI version of the CLI PAsswordSafe software, steps are the same (generate new file, open it, modify it and quit).
 
 However there is some light bugs, such as having to re-open the file each time to read a password, or the saving function not working (Still working on it).
+
+Main Issue: as the GUI was made using windows libraries, it only works on Windows.
