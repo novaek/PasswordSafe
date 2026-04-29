@@ -87,3 +87,9 @@ On-disk file:
 # 3) Limit of a single file :
 Limit of website : 65535 websites\
 limit of entries for a single website : 256 passwords and usernames
+
+# 4) GUI version : 
+
+I also have developped a GUI version of the CLI PAsswordSafe software, steps are the same (generate new file, open it, modify it and quit).
+
+However there is some light bugs, such as having to re-open the file each time to read a password, or the saving function not working (Still working on it).
