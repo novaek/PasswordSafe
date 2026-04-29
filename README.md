@@ -1,5 +1,5 @@
 # PasswordSafe (WIP)
-A safe for all your password, only local, and managed by you and you only.
+A password manager for all your password, only local, and managed by you and you only.
 
 
 # 1) how does it works ?
